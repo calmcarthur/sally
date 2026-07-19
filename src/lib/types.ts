@@ -11,6 +11,8 @@ export type Person = {
   code: string;
   joinDate: string; // YYYY-MM-DD
   createdAt: string;
+  /** false = soft-removed; data kept, hidden from board until re-added by code */
+  active: boolean;
 };
 
 export type ActivityLog = {
@@ -70,5 +72,5 @@ export type PersonStats = {
     activeRecovery: number;
   };
   monthlyTotals: { month: number; total: number }[];
-  weeklyActive: boolean[]; // last 12 weeks, oldest → newest
+  weeklyActive: boolean[]; // last 24 weeks (~6 months), oldest → newest; true if ≥4 active days
 };

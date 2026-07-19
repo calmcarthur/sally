@@ -15,6 +15,10 @@ type Props = {
   onDateChange: (date: string) => void;
   onFlagsChange: (flags: Flags) => void;
   onSave: () => void;
+  /** App-timezone today (YYYY-MM-DD) — caps the date picker. */
+  maxDate?: string;
+  /** Earliest selectable date (usually join date). */
+  minDate?: string;
   todayEmptyNudge?: string | null;
 };
 
@@ -28,6 +32,8 @@ export function LogPanel({
   onDateChange,
   onFlagsChange,
   onSave,
+  maxDate,
+  minDate,
   todayEmptyNudge,
 }: Props) {
   function toggle(key: ActivityKey) {
@@ -69,6 +75,8 @@ export function LogPanel({
           <input
             type="date"
             value={date}
+            min={minDate}
+            max={maxDate}
             onChange={(e) => onDateChange(e.target.value)}
             className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
           />

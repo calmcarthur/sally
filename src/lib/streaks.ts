@@ -1,4 +1,4 @@
-import { addDaysISO, parseDate, todayISO, toISO } from "./dates";
+import { addDaysISO, todayISO } from "./dates";
 import type { ActivityLog } from "./types";
 
 function hasAny(log: ActivityLog): boolean {
@@ -15,11 +15,11 @@ export function activeDates(logs: ActivityLog[]): string[] {
   return [...new Set(logs.filter(hasAny).map((l) => l.date))].sort();
 }
 
-export function currentStreak(
-  logs: ActivityLog[],
+export function currentStreakFromDates(
+  dates: string[],
   asOf: string = todayISO(),
 ): number {
-  const set = new Set(activeDates(logs));
+  const set = new Set(dates);
   if (set.size === 0) return 0;
 
   // Streak can include today or yesterday (if today not yet logged)
@@ -37,6 +37,13 @@ export function currentStreak(
   return streak;
 }
 
+export function currentStreak(
+  logs: ActivityLog[],
+  asOf: string = todayISO(),
+): number {
+  return currentStreakFromDates(activeDates(logs), asOf);
+}
+
 export function bestStreak(
   logs: ActivityLog[],
   rangeStart?: string,
@@ -50,10 +57,6 @@ export function bestStreak(
   let best = 1;
   let run = 1;
   for (let i = 1; i < dates.length; i++) {
-    const prev = parseDate(dates[i - 1]!);
-    const curr = parseDate(dates[i]!);
-    const expected = toISO(new Date(prev.getTime() + 86400000));
-    // Compare calendar adjacency
     const nextDay = addDaysISO(dates[i - 1]!, 1);
     if (dates[i] === nextDay) {
       run += 1;
@@ -61,8 +64,6 @@ export function bestStreak(
     } else {
       run = 1;
     }
-    void curr;
-    void expected;
   }
   return best;
 }

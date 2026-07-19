@@ -3,15 +3,29 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
 import { SEED_PEOPLE } from "./constants";
-import { todayISO } from "./dates";
 import type { ActivityLog, Person, PersonalRecord } from "./types";
 
 let client: Client | null = null;
 let initialized = false;
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+}
+
 function getDbUrl(): string {
-  if (process.env.TURSO_DATABASE_URL) {
-    return process.env.TURSO_DATABASE_URL;
+  const turso = process.env.TURSO_DATABASE_URL?.trim();
+  if (turso) {
+    if (isProduction() && !turso.startsWith("libsql:")) {
+      throw new Error(
+        "TURSO_DATABASE_URL must be a libsql:// URL in production (file: DBs are ephemeral on Vercel).",
+      );
+    }
+    return turso;
+  }
+  if (isProduction()) {
+    throw new Error(
+      "TURSO_DATABASE_URL is required in production. Local file DB is ephemeral on Vercel.",
+    );
   }
   const dir = path.join(process.cwd(), "data");
   mkdirSync(dir, { recursive: true });
@@ -20,17 +34,38 @@ function getDbUrl(): string {
 
 export function getDb(): Client {
   if (!client) {
+    const url = getDbUrl();
+    if (url.startsWith("libsql:") && !process.env.TURSO_AUTH_TOKEN) {
+      throw new Error("TURSO_AUTH_TOKEN is required when using Turso.");
+    }
     client = createClient({
-      url: getDbUrl(),
+      url,
       authToken: process.env.TURSO_AUTH_TOKEN,
     });
   }
   return client;
 }
 
+async function migratePeopleActive(db: Client) {
+  const info = await db.execute(`PRAGMA table_info(people)`);
+  const hasActive = info.rows.some((r) => String(r.name) === "active");
+  if (!hasActive) {
+    await db.execute(
+      `ALTER TABLE people ADD COLUMN active INTEGER NOT NULL DEFAULT 1`,
+    );
+  }
+}
+
 export async function ensureSchema() {
   if (initialized) return;
   const db = getDb();
+
+  // Enforce FKs when the underlying engine supports them (SQLite / libSQL)
+  try {
+    await db.execute("PRAGMA foreign_keys = ON");
+  } catch {
+    // Turso remote may ignore PRAGMA — fine
+  }
 
   await db.batch(
     [
@@ -39,7 +74,8 @@ export async function ensureSchema() {
         name TEXT NOT NULL,
         code TEXT NOT NULL UNIQUE,
         join_date TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1
       )`,
       `CREATE TABLE IF NOT EXISTS activity_logs (
         id TEXT PRIMARY KEY,
@@ -59,6 +95,10 @@ export async function ensureSchema() {
         recorded_on TEXT NOT NULL,
         UNIQUE(person_id, exercise_key)
       )`,
+      `CREATE TABLE IF NOT EXISTS schema_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )`,
       `CREATE INDEX IF NOT EXISTS idx_logs_person_date ON activity_logs(person_id, date)`,
       `CREATE INDEX IF NOT EXISTS idx_logs_date ON activity_logs(date)`,
       `CREATE INDEX IF NOT EXISTS idx_prs_exercise ON personal_records(exercise_key)`,
@@ -66,15 +106,29 @@ export async function ensureSchema() {
     "write",
   );
 
+  await migratePeopleActive(db);
+
+  await db.execute(
+    `INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('version', '2')`,
+  );
+
   const count = await db.execute("SELECT COUNT(*) AS c FROM people");
   const n = Number(count.rows[0]?.c ?? 0);
-  if (n === 0) {
-    const joinDate = `${new Date().getFullYear()}-01-01`;
+  // Seed roster only in local/dev (or when explicitly enabled)
+  const allowSeed =
+    !isProduction() || process.env.SALLY_SEED_ON_EMPTY === "1";
+  if (n === 0 && allowSeed) {
     const createdAt = new Date().toISOString();
     for (const p of SEED_PEOPLE) {
       await db.execute({
-        sql: `INSERT INTO people (id, name, code, join_date, created_at) VALUES (?, ?, ?, ?, ?)`,
-        args: [nanoid(), p.name, p.code, joinDate, createdAt],
+        sql: `INSERT INTO people (id, name, code, join_date, created_at, active) VALUES (?, ?, ?, ?, ?, 1)`,
+        args: [
+          nanoid(),
+          p.name,
+          p.code,
+          "joinDate" in p && p.joinDate ? p.joinDate : "2025-01-01",
+          createdAt,
+        ],
       });
     }
   }
@@ -89,6 +143,9 @@ function mapPerson(row: Record<string, unknown>): Person {
     code: String(row.code),
     joinDate: String(row.join_date),
     createdAt: String(row.created_at),
+    active: row.active === undefined || row.active === null
+      ? true
+      : Boolean(Number(row.active)),
   };
 }
 
@@ -114,32 +171,122 @@ function mapPr(row: Record<string, unknown>): PersonalRecord {
   };
 }
 
+/** Active people only — used by Activities, Stats, PRs. */
 export async function listPeople(): Promise<Person[]> {
   await ensureSchema();
   const res = await getDb().execute(
-    "SELECT * FROM people ORDER BY created_at ASC",
+    "SELECT * FROM people WHERE active = 1 ORDER BY name COLLATE NOCASE ASC",
   );
   return res.rows.map((r) => mapPerson(r as Record<string, unknown>));
 }
 
+/** All people including soft-removed (admin). */
+export async function listAllPeople(): Promise<Person[]> {
+  await ensureSchema();
+  const res = await getDb().execute(
+    "SELECT * FROM people ORDER BY active DESC, name COLLATE NOCASE ASC",
+  );
+  return res.rows.map((r) => mapPerson(r as Record<string, unknown>));
+}
+
+export async function getPersonByCode(code: string): Promise<Person | null> {
+  await ensureSchema();
+  const res = await getDb().execute({
+    sql: `SELECT * FROM people WHERE code = ?`,
+    args: [code.trim().toUpperCase()],
+  });
+  if (!res.rows[0]) return null;
+  return mapPerson(res.rows[0] as Record<string, unknown>);
+}
+
+export async function getPersonById(id: string): Promise<Person | null> {
+  await ensureSchema();
+  const res = await getDb().execute({
+    sql: `SELECT * FROM people WHERE id = ?`,
+    args: [id],
+  });
+  if (!res.rows[0]) return null;
+  return mapPerson(res.rows[0] as Record<string, unknown>);
+}
+
+/** Active calendar dates for a person (any activity), newest first, optional lower bound. */
+export async function getActiveDatesDesc(
+  personId: string,
+  sinceISO?: string,
+): Promise<string[]> {
+  await ensureSchema();
+  const res = sinceISO
+    ? await getDb().execute({
+        sql: `SELECT date FROM activity_logs
+          WHERE person_id = ?
+            AND date >= ?
+            AND (weight_training = 1 OR cardio = 1 OR sport = 1 OR active_recovery = 1)
+          ORDER BY date DESC`,
+        args: [personId, sinceISO],
+      })
+    : await getDb().execute({
+        sql: `SELECT date FROM activity_logs
+          WHERE person_id = ?
+            AND (weight_training = 1 OR cardio = 1 OR sport = 1 OR active_recovery = 1)
+          ORDER BY date DESC`,
+        args: [personId],
+      });
+  return res.rows.map((r) => String(r.date));
+}
+
+/**
+ * Add a new person, or restore a soft-removed one by matching code.
+ * Code is the stable unique key — history stays attached to the same row.
+ */
 export async function createPerson(
   name: string,
   code: string,
   joinDate: string,
-): Promise<Person> {
+): Promise<{ person: Person; restored: boolean }> {
   await ensureSchema();
+  const normalized = code.trim().toUpperCase();
+  const existing = await getPersonByCode(normalized);
+
+  if (existing) {
+    if (existing.active) {
+      throw new Error("UNIQUE: That identity code is already on the board.");
+    }
+    // Restore — keep join_date and all history; refresh display name
+    await getDb().execute({
+      sql: `UPDATE people SET active = 1, name = ? WHERE id = ?`,
+      args: [name.trim(), existing.id],
+    });
+    return {
+      person: { ...existing, name: name.trim(), active: true },
+      restored: true,
+    };
+  }
+
   const person: Person = {
     id: nanoid(),
     name: name.trim(),
-    code: code.trim().toUpperCase(),
+    code: normalized,
     joinDate,
     createdAt: new Date().toISOString(),
+    active: true,
   };
   await getDb().execute({
-    sql: `INSERT INTO people (id, name, code, join_date, created_at) VALUES (?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO people (id, name, code, join_date, created_at, active) VALUES (?, ?, ?, ?, ?, 1)`,
     args: [person.id, person.name, person.code, person.joinDate, person.createdAt],
   });
-  return person;
+  return { person, restored: false };
+}
+
+/** Soft-remove: hide from board, keep all activity + PR rows. Returns false if missing. */
+export async function deactivatePerson(id: string): Promise<boolean> {
+  await ensureSchema();
+  const person = await getPersonById(id);
+  if (!person) return false;
+  await getDb().execute({
+    sql: `UPDATE people SET active = 0 WHERE id = ?`,
+    args: [id],
+  });
+  return true;
 }
 
 export async function getLogsForMonth(
@@ -317,6 +464,3 @@ export async function deletePr(personId: string, exerciseKey: string) {
     args: [personId, exerciseKey],
   });
 }
-
-/** Used only for seed/demo — expose today for join defaults */
-export { todayISO };

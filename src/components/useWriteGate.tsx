@@ -1,28 +1,31 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { getStoredPin } from "@/lib/pin";
+import { getStoredPin, type PinKind } from "@/lib/pin-client";
 import { PinGate } from "./PinGate";
 
-/** Ensures write PIN before running an action. Returns true if unlocked. */
-export function useWriteGate() {
+function usePinGate(kind: PinKind) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<(() => void) | null>(null);
 
-  const withWriteAccess = useCallback(async (action: () => void | Promise<void>) => {
-    if (getStoredPin()) {
-      await action();
-      return;
-    }
-    setPending(() => () => {
-      void action();
-    });
-    setOpen(true);
-  }, []);
+  const withAccess = useCallback(
+    async (action: () => void | Promise<void>) => {
+      if (getStoredPin(kind)) {
+        await action();
+        return;
+      }
+      setPending(() => () => {
+        void action();
+      });
+      setOpen(true);
+    },
+    [kind],
+  );
 
   const gate = (
     <PinGate
       open={open}
+      kind={kind}
       onClose={() => {
         setOpen(false);
         setPending(null);
@@ -34,5 +37,17 @@ export function useWriteGate() {
     />
   );
 
-  return { withWriteAccess, gate };
+  return { withAccess, gate };
+}
+
+/** Group PIN — activities + PRs. */
+export function useWriteGate() {
+  const { withAccess, gate } = usePinGate("write");
+  return { withWriteAccess: withAccess, gate };
+}
+
+/** Admin password — people add / restore / remove. */
+export function useAdminGate() {
+  const { withAccess, gate } = usePinGate("admin");
+  return { withAdminAccess: withAccess, gate };
 }

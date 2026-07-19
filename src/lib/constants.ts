@@ -12,14 +12,14 @@ export const ACTIVITY_TYPES = [
     key: "cardio" as const,
     label: "Cardio",
     short: "Cardio",
-    color: "#2D6A4F",
+    color: "#08814A",
     cssVar: "--color-cardio",
   },
   {
     key: "sport" as const,
     label: "Sport",
     short: "Sport",
-    color: "#D4A574",
+    color: "#BCB381",
     cssVar: "--color-sport",
   },
   {
@@ -33,7 +33,10 @@ export const ACTIVITY_TYPES = [
 
 export type ActivityKey = (typeof ACTIVITY_TYPES)[number]["key"];
 
-export const STREAK_THRESHOLD = 7;
+export const STREAK_THRESHOLD = 5;
+
+/** First year the app tracks. Year picker = APP_START_YEAR … current year. */
+export const APP_START_YEAR = 2025;
 
 export const EXERCISES: ExerciseDef[] = [
   // Lifting
@@ -67,9 +70,13 @@ export const EXERCISE_BY_KEY = Object.fromEntries(
 ) as Record<string, ExerciseDef>;
 
 export const SEED_PEOPLE = [
-  { name: "Cal", code: "CM003" },
-  { name: "Martin", code: "MG006" },
-  { name: "Bilal", code: "BA002" },
+  { name: "Arya", code: "AM001", joinDate: "2025-01-01" },
+  { name: "Bilal", code: "BA002", joinDate: "2025-01-01" },
+  { name: "Cal", code: "CM003", joinDate: "2025-01-01" },
+  { name: "Jasper", code: "JC004", joinDate: "2025-06-15" },
+  { name: "Logan", code: "LL005", joinDate: "2025-01-01" },
+  { name: "Martin", code: "MG006", joinDate: "2025-01-01" },
+  { name: "Sebastian", code: "SM007", joinDate: "2025-03-01" },
 ] as const;
 
 export const ROASTS = [

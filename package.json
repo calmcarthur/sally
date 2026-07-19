@@ -2,11 +2,16 @@
   "name": "sally",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:reset": "rm -rf data && mkdir -p data && echo 'Local DB cleared. Restart dev server.'",
+    "db:seed": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

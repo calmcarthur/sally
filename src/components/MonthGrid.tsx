@@ -73,7 +73,7 @@ export function MonthGrid({
         ))}
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[var(--border)]" />
-          nothing
+          Nothing
         </span>
       </div>
 
@@ -171,7 +171,7 @@ export function MonthGrid({
 
       {rows.length === 0 && (
         <p className="mt-4 text-sm text-[var(--ink-muted)]">
-          No maggots yet. Add people from Stats.
+          No people yet.
         </p>
       )}
     </section>

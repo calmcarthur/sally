@@ -15,13 +15,18 @@ export function Nav() {
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link href="/activities" className="brand text-2xl font-bold tracking-tight text-[var(--ink)]">
-            Sally
-            <span className="ml-2 text-sm font-normal text-[var(--ink-muted)]">
-              maggots only
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-2.5">
+          <div className="flex items-baseline gap-2">
+            <Link
+              href="/activities"
+              className="brand text-2xl font-bold tracking-tight text-[var(--ink)]"
+            >
+              Sally
+            </Link>
+            <span className="hidden text-sm font-normal text-[var(--ink-muted)] md:inline">
+              Had to tell Sally I was going to the navy
             </span>
-          </Link>
+          </div>
           <nav className="hidden gap-1 sm:flex">
             {LINKS.map((link) => {
               const active = pathname.startsWith(link.href);

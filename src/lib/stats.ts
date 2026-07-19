@@ -5,7 +5,7 @@ import {
   todayISO,
   yearBounds,
 } from "./dates";
-import { computeRecordHolders, countRecordsHeld } from "./prs";
+import { computeRecordHolders, countRecordsHeld, type RecordHolder } from "./prs";
 import { bestStreak, currentStreak } from "./streaks";
 import type {
   ActivityLog,
@@ -28,8 +28,16 @@ function filterLogs(
   logs: ActivityLog[],
   personId: string,
   year: number | null,
+  joinDate: string,
+  asOf: string,
 ): ActivityLog[] {
-  let filtered = logs.filter((l) => l.personId === personId && hasAny(l));
+  let filtered = logs.filter(
+    (l) =>
+      l.personId === personId &&
+      hasAny(l) &&
+      l.date >= joinDate &&
+      l.date <= asOf,
+  );
   if (year !== null) {
     const { start, end } = yearBounds(year);
     filtered = filtered.filter((l) => l.date >= start && l.date <= end);
@@ -49,10 +57,16 @@ export function computePersonStats(
   allPrs: PersonalRecord[],
   year: number | null,
   asOf: string = todayISO(),
+  holders?: RecordHolder[],
 ): PersonStats {
-  const logs = filterLogs(allLogs, person.id, year);
-  // For current streak always use full history
-  const personAllLogs = allLogs.filter((l) => l.personId === person.id);
+  const logs = filterLogs(allLogs, person.id, year, person.joinDate, asOf);
+  // For current streak always use full history (still clamp to join..today)
+  const personAllLogs = allLogs.filter(
+    (l) =>
+      l.personId === person.id &&
+      l.date >= person.joinDate &&
+      l.date <= asOf,
+  );
 
   let weightTraining = 0;
   let cardio = 0;
@@ -75,8 +89,9 @@ export function computePersonStats(
       ? 0
       : Math.round((daysActive / eligibleDays) * 1000) / 10;
 
-  const holders = computeRecordHolders(allPrs);
-  const sallyRecordsHeld = countRecordsHeld(person.id, holders);
+  const recordHolders =
+    holders ?? computeRecordHolders(allPrs, [person.id]);
+  const sallyRecordsHeld = countRecordsHeld(person.id, recordHolders);
 
   const rangeStart = year !== null ? yearBounds(year).start : undefined;
   const rangeEnd = year !== null ? yearBounds(year).end : undefined;
@@ -105,14 +120,16 @@ export function computePersonStats(
     }
   }
 
-  const weekStarts = lastNWeekStarts(12, asOf);
+  const weekStarts = lastNWeekStarts(24, asOf);
   const weeklyActive = weekStarts.map((start) => {
     const end = addDays(start, 6);
-    return personAllLogs.some((l) => {
-      if (!hasAny(l)) return false;
+    let activeDays = 0;
+    for (const l of personAllLogs) {
+      if (!hasAny(l)) continue;
       const d = parseISO(l.date);
-      return isWithinInterval(d, { start, end });
-    });
+      if (isWithinInterval(d, { start, end })) activeDays += 1;
+    }
+    return activeDays >= 4;
   });
 
   return {
@@ -141,7 +158,11 @@ export function computeAllStats(
   allPrs: PersonalRecord[],
   year: number | null,
 ): PersonStats[] {
-  return people.map((p) => computePersonStats(p, allLogs, allPrs, year));
+  const activeIds = people.map((p) => p.id);
+  const holders = computeRecordHolders(allPrs, activeIds);
+  return people.map((p) =>
+    computePersonStats(p, allLogs, allPrs, year, todayISO(), holders),
+  );
 }
 
 export type Leaderboard = {

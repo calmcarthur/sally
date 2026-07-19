@@ -1,20 +1,28 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { storePin } from "@/lib/pin";
+import { storePin, type PinKind } from "@/lib/pin-client";
 
 type Props = {
   open: boolean;
+  kind?: PinKind;
   onClose: () => void;
   onUnlocked: () => void;
 };
 
-export function PinGate({ open, onClose, onUnlocked }: Props) {
+export function PinGate({
+  open,
+  kind = "write",
+  onClose,
+  onUnlocked,
+}: Props) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
+
+  const isAdmin = kind === "admin";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -24,11 +32,11 @@ export function PinGate({ open, onClose, onUnlocked }: Props) {
       const res = await fetch("/api/unlock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({ pin, kind }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Wrong PIN");
-      storePin(pin);
+      storePin(pin, kind);
       setPin("");
       onUnlocked();
       onClose();
@@ -40,22 +48,25 @@ export function PinGate({ open, onClose, onUnlocked }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-xl border border-[var(--border-strong)] bg-[var(--surface-raised)] p-5 shadow-lg"
       >
-        <h2 className="brand text-xl font-bold">Group PIN</h2>
+        <h2 className="brand text-xl font-bold">
+          {isAdmin ? "Administrator password" : "Group PIN"}
+        </h2>
         <p className="mt-1 text-sm text-[var(--ink-muted)]">
-          Anyone can look. Writing needs the shared PIN.
+          {isAdmin
+            ? "Needed to add, restore, or remove people."
+            : "Anyone can look. Logging activities and PRs needs the group PIN."}
         </p>
         <input
           type="password"
-          inputMode="numeric"
           autoFocus
           value={pin}
           onChange={(e) => setPin(e.target.value)}
-          placeholder="Enter PIN"
+          placeholder={isAdmin ? "Admin password" : "Group PIN"}
           className="mt-4 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 outline-none focus:border-[var(--accent)]"
         />
         {error && (

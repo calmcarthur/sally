@@ -10,8 +10,8 @@
   --border: #c4b8a4;
   --border-strong: #3d3428;
   --color-wt: #1b4332;
-  --color-cardio: #2d6a4f;
-  --color-sport: #d4a574;
+  --color-cardio: #08814a;
+  --color-sport: #bcb381;
   --color-ar: #9ca3af;
   --accent: #1b4332;
   --danger: #8b3a2f;
@@ -23,6 +23,7 @@
   --font-sans: var(--font-display);
   --font-display: var(--font-display);
   --font-body: var(--font-body);
+  --grid-template-columns-24: repeat(24, minmax(0, 1fr));
 }
 
 * {
@@ -31,6 +32,19 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Full laptop width feels oversized; nudge scale down without touching phone */
+@media (min-width: 1024px) {
+  html {
+    font-size: 93.75%; /* 15px */
+  }
+}
+
+@media (min-width: 1400px) {
+  html {
+    font-size: 87.5%; /* 14px — closer to a comfortable Ctrl- zoom */
+  }
 }
 
 body {

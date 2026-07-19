@@ -2,45 +2,47 @@ import {
   addDays,
   differenceInCalendarDays,
   eachDayOfInterval,
-  endOfMonth,
-  endOfYear,
-  format,
-  getDaysInMonth,
   isAfter,
   isBefore,
   max as maxDate,
   min as minDate,
   parseISO,
-  startOfMonth,
   startOfWeek,
-  startOfYear,
   subWeeks,
 } from "date-fns";
+import { todayInTimeZone } from "./validate";
 
+/** "Today" in the app timezone (default Europe/London). */
 export function todayISO(): string {
-  return format(new Date(), "yyyy-MM-dd");
+  return todayInTimeZone();
 }
 
 export function toISO(d: Date): string {
-  return format(d, "yyyy-MM-dd");
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export function parseDate(iso: string): Date {
-  return parseISO(iso);
+  // Noon UTC avoids DST edge cases when only the calendar date matters
+  return parseISO(`${iso}T12:00:00`);
 }
 
+/** Calendar days in a month — pure date math, no server TZ. */
 export function monthDays(year: number, month: number): string[] {
-  const start = startOfMonth(new Date(year, month - 1, 1));
-  const days = getDaysInMonth(start);
-  return Array.from({ length: days }, (_, i) =>
-    format(new Date(year, month - 1, i + 1), "yyyy-MM-dd"),
-  );
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return Array.from({ length: days }, (_, i) => {
+    const d = i + 1;
+    return `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  });
 }
 
 export function yearBounds(year: number): { start: string; end: string } {
-  const start = startOfYear(new Date(year, 0, 1));
-  const end = endOfYear(new Date(year, 0, 1));
-  return { start: toISO(start), end: toISO(end) };
+  return {
+    start: `${year}-01-01`,
+    end: `${year}-12-31`,
+  };
 }
 
 /** Eligible days for % worked: max(yearStart, joinDate) .. min(today, yearEnd) */
@@ -54,7 +56,6 @@ export function eligibleDayCount(
   let rangeEnd: Date;
 
   if (year === null) {
-    // Lifetime: joinDate → today
     rangeStart = parseDate(joinDate);
     rangeEnd = asOfDate;
   } else {
@@ -72,18 +73,17 @@ export function daysInRange(start: string, end: string): string[] {
   return eachDayOfInterval({
     start: parseDate(start),
     end: parseDate(end),
-  }).map(toISO);
+  }).map((d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  });
 }
 
 export function lastNWeekStarts(n: number, asOf: string = todayISO()): Date[] {
   const base = startOfWeek(parseDate(asOf), { weekStartsOn: 1 });
   return Array.from({ length: n }, (_, i) => subWeeks(base, n - 1 - i));
-}
-
-export function clampMonth(year: number, month: number) {
-  const start = startOfMonth(new Date(year, month - 1, 1));
-  const end = endOfMonth(start);
-  return { start: toISO(start), end: toISO(end) };
 }
 
 export function isDateBefore(a: string, b: string) {

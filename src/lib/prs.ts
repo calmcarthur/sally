@@ -53,9 +53,22 @@ export type RecordHolder = {
 
 export function computeRecordHolders(
   prs: PersonalRecord[],
+  /** If set, only PRs from these people count (active roster). */
+  activePersonIds?: Set<string> | string[],
 ): RecordHolder[] {
+  const allow =
+    activePersonIds == null
+      ? null
+      : activePersonIds instanceof Set
+        ? activePersonIds
+        : new Set(activePersonIds);
+
   return EXERCISES.map((ex) => {
-    const relevant = prs.filter((p) => p.exerciseKey === ex.key);
+    const relevant = prs.filter(
+      (p) =>
+        p.exerciseKey === ex.key &&
+        (allow == null || allow.has(p.personId)),
+    );
     if (relevant.length === 0) {
       return {
         exerciseKey: ex.key,

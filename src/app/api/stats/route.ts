@@ -1,17 +1,31 @@
 import { NextResponse } from "next/server";
 import { getAllLogs, listAllPrs, listPeople } from "@/lib/db";
 import { buildLeaderboards, computeAllStats } from "@/lib/stats";
-import { PRAISE, ROASTS } from "@/lib/constants";
+import { APP_START_YEAR } from "@/lib/constants";
+import { currentYearInTimeZone } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const yearParam = searchParams.get("year");
-  const year =
-    yearParam === "lifetime" || yearParam === "all"
-      ? null
-      : Number(yearParam ?? new Date().getFullYear());
+  const currentYear = currentYearInTimeZone();
+
+  let year: number | null;
+  if (yearParam === "lifetime" || yearParam === "all") {
+    year = null;
+  } else if (yearParam == null || yearParam === "") {
+    year = currentYear;
+  } else {
+    const n = Number(yearParam);
+    if (!Number.isInteger(n) || n < APP_START_YEAR || n > currentYear) {
+      return NextResponse.json(
+        { error: `year must be ${APP_START_YEAR}–${currentYear}, or lifetime.` },
+        { status: 400 },
+      );
+    }
+    year = n;
+  }
 
   const [people, logs, prs] = await Promise.all([
     listPeople(),
@@ -21,15 +35,10 @@ export async function GET(request: Request) {
 
   const stats = computeAllStats(people, logs, prs, year);
   const leaderboards = buildLeaderboards(stats);
-  const quip =
-    Math.random() > 0.5
-      ? ROASTS[Math.floor(Math.random() * ROASTS.length)]
-      : PRAISE[Math.floor(Math.random() * PRAISE.length)];
 
   return NextResponse.json({
     year: year ?? "lifetime",
     stats,
     leaderboards,
-    quip,
   });
 }
