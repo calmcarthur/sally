@@ -118,15 +118,15 @@ export default function PrsPage() {
         </p>
       </div>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 shadow-sm">
+      <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 shadow-sm">
         <h2 className="brand text-xl font-bold">Enter / update</h2>
-        <div className="mt-4 grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="text-sm">
+        <div className="mt-4 grid min-w-0 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="min-w-0 text-sm">
             <span className="text-[var(--ink-muted)]">Who</span>
             <select
               value={personId}
               onChange={(e) => setPersonId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+              className="mt-1 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
             >
               {data.people.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -135,12 +135,12 @@ export default function PrsPage() {
               ))}
             </select>
           </label>
-          <label className="text-sm lg:col-span-2">
+          <label className="min-w-0 text-sm lg:col-span-2">
             <span className="text-[var(--ink-muted)]">Exercise</span>
             <select
               value={exerciseKey}
               onChange={(e) => setExerciseKey(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+              className="mt-1 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
             >
               {CATEGORIES.map((cat) => (
                 <optgroup key={cat.key} label={cat.title}>
@@ -155,24 +155,24 @@ export default function PrsPage() {
               ))}
             </select>
           </label>
-          <label className="text-sm">
+          <label className="min-w-0 text-sm">
             <span className="text-[var(--ink-muted)]">Value</span>
             <input
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder="225 or 22:15"
               title="Number, or time as m:ss / h:mm:ss"
-              className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+              className="mt-1 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
             />
           </label>
-          <label className="text-sm">
+          <label className="min-w-0 text-sm">
             <span className="text-[var(--ink-muted)]">Date</span>
             <input
               type="date"
               value={recordedOn}
               max={data.today}
               onChange={(e) => setRecordedOn(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+              className="mt-1 w-full min-w-0 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
             />
           </label>
         </div>

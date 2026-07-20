@@ -97,7 +97,7 @@ export function BlockOutPanel({
   const minJoin = people.find((p) => p.id === personId)?.joinDate;
 
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 shadow-sm">
+    <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="brand text-xl font-bold">Block out</h2>
         <p className="text-xs text-[var(--ink-muted)]">
@@ -107,14 +107,14 @@ export function BlockOutPanel({
 
       <form
         onSubmit={(e) => void apply(e)}
-        className="mt-4 grid gap-3 sm:grid-cols-2"
+        className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2"
       >
-        <label className="block text-sm sm:col-span-2">
+        <label className="block min-w-0 text-sm sm:col-span-2">
           <span className="text-[var(--ink-muted)]">Who</span>
           <select
             value={personId}
             onChange={(e) => onPersonChange(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+            className="mt-1 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
           >
             {people.map((p) => (
               <option key={p.id} value={p.id}>
@@ -123,7 +123,7 @@ export function BlockOutPanel({
             ))}
           </select>
         </label>
-        <label className="block text-sm">
+        <label className="block min-w-0 text-sm">
           <span className="text-[var(--ink-muted)]">From</span>
           <input
             type="date"
@@ -131,10 +131,10 @@ export function BlockOutPanel({
             value={startDate}
             min={minJoin}
             onChange={(e) => setStartDate(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+            className="mt-1 w-full min-w-0 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
           />
         </label>
-        <label className="block text-sm">
+        <label className="block min-w-0 text-sm">
           <span className="text-[var(--ink-muted)]">To</span>
           <input
             type="date"
@@ -142,7 +142,7 @@ export function BlockOutPanel({
             value={endDate}
             min={startDate || minJoin}
             onChange={(e) => setEndDate(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+            className="mt-1 w-full min-w-0 max-w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
           />
         </label>
         <button

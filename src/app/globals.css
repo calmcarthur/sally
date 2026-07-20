@@ -74,6 +74,15 @@ textarea {
   font: inherit;
 }
 
+/* iOS Safari date inputs have a huge intrinsic min-width that blows past cards */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+select {
+  max-width: 100%;
+  min-width: 0;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--color-cardio) 35%, transparent);
 }
