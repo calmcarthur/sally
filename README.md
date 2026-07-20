@@ -77,18 +77,22 @@ Turso (libSQL / SQLite at the edge)
 
 ```
 people
-  id, name, code (UNIQUE), join_date, created_at, active (0|1)
+  id, name, code (UNIQUE), join_date, created_at, active (0|1), deactivated_at
 
 activity_logs
   one row per person per date
   flags: weight_training, cardio, sport, active_recovery
+
+blockouts
+  person_id, start_date, end_date (inclusive ranges)
+  generic hurt/sick/extenuating — no reason stored
 
 personal_records
   one row per person per exercise_key
   value (text), recorded_on
 ```
 
-**Code** is the permanent identity. Soft-remove sets `active = 0`; logs and PRs stay. Re-add with the same code → full history returns.
+**Code** is the permanent identity. Soft-remove sets `active = 0` and records `deactivated_at`; logs and PRs stay. Re-add with the same code → full history returns, and the inactive gap is **blocked out** automatically so % days isn’t hurt.
 
 **Name order** is always alphabetical (A→Z) everywhere: dropdowns, month grid, charts, tables, PR boards.
 
@@ -96,8 +100,9 @@ personal_records
 
 **Activities**
 - Log panel: who, date, multi-select types → Save (PIN).
-- Month grid: one row per active person; stacked colours per day; blank = Nothing.
-- Tap a day to edit. Streak badge (🔥) when current streak ≥ 5.
+- **Block out** panel: date range for hurt/sick/extenuating circumstances (PIN). Shows as **×** on the grid; excluded from eligible days and skipped by streaks.
+- Month grid: one row per active person; stacked colours per day; blank = Nothing; × = Blocked.
+- Tap a day to edit (or unblock). Streak badge (🔥) when current streak ≥ 5.
 
 **Stats**
 - Yearly (default) or Lifetime.
@@ -114,9 +119,10 @@ personal_records
 1. On the **Activities** page, click the **Activities** title **5 times quickly**.
 2. Enter the **administrator password** (not the group PIN).
 3. **Add** new person (name, code, join date) or **restore** by same code.
-4. **Remove** = soft-hide (two confirms). Data kept. Restore anytime.
+4. **Edit join date** inline on each active person.
+5. **Remove** = soft-hide (two confirms). Data kept. Restore anytime — inactive days become blocked out.
 
-Friends only need the group PIN for day-to-day logging. Keep the admin password to yourself (or whoever manages the roster).
+Friends only need the group PIN for day-to-day logging and blockouts. Keep the admin password to yourself (or whoever manages the roster).
 
 ---
 
@@ -136,17 +142,18 @@ Friends only need the group PIN for day-to-day logging. Keep the admin password 
 percent = activeDays / eligibleDays × 100
 ```
 
-**Eligible days (yearly):** `max(Jan 1, joinDate)` → `min(today, Dec 31)`  
-**Lifetime:** `joinDate` → `today`
+**Eligible days (yearly):** `max(Jan 1, joinDate)` → `min(today, Dec 31)`, minus blocked days  
+**Lifetime:** `joinDate` → `today`, minus blocked days
 
-Mid-year joiners are not punished for months before they joined. Jasper in the demo (`join_date = 2025-06-15`) is the example.
+Mid-year joiners are not punished for months before they joined. Jasper in the demo (`join_date = 2025-06-15`) is the example. Blocked-out days (hurt / sick / remove→restore gaps) also don’t count against you.
 
 ### Streaks
 
-- Active day = ≥1 activity type logged.
+- Active day = ≥1 activity type logged (and not blocked).
 - Current streak: consecutive days ending today, or yesterday if today is empty.
+- **Blocked days are skipped** — they don’t break a streak and don’t count as active.
 - Badge at ≥ **5** days.
-- Best streak: longest run in the selected scope.
+- Best streak: longest run in the selected scope (blocked gaps bridged).
 
 ### Head-to-head
 

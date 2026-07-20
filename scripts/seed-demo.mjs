@@ -24,7 +24,8 @@ await db.batch(
       code TEXT NOT NULL UNIQUE,
       join_date TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      active INTEGER NOT NULL DEFAULT 1
+      active INTEGER NOT NULL DEFAULT 1,
+      deactivated_at TEXT
     )`,
     `CREATE TABLE activity_logs (
       id TEXT PRIMARY KEY,
@@ -43,6 +44,13 @@ await db.batch(
       value TEXT NOT NULL,
       recorded_on TEXT NOT NULL,
       UNIQUE(person_id, exercise_key)
+    )`,
+    `CREATE TABLE blockouts (
+      id TEXT PRIMARY KEY,
+      person_id TEXT NOT NULL REFERENCES people(id),
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      created_at TEXT NOT NULL
     )`,
   ],
   "write",

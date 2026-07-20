@@ -11,6 +11,7 @@ import {
 import { ApiError, apiFetch } from "@/lib/api-client";
 import type { ActivityKey } from "@/lib/constants";
 import type { Person, PersonMonthRow } from "@/lib/types";
+import { BlockOutPanel } from "@/components/BlockOutPanel";
 import { LogPanel } from "@/components/LogPanel";
 import { MonthGrid } from "@/components/MonthGrid";
 import { PeopleAdmin } from "@/components/PeopleAdmin";
@@ -36,7 +37,9 @@ export default function ActivitiesPage() {
   const [personId, setPersonId] = useState("");
   const [date, setDate] = useState("");
   const [flags, setFlags] = useState<Flags>(emptyFlags);
+  const [dayBlocked, setDayBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [unblocking, setUnblocking] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [canUndo, setCanUndo] = useState(false);
@@ -105,7 +108,8 @@ export default function ActivitiesPage() {
         body: JSON.stringify({ personId: pid, date: d }),
       });
       const data = await res.json();
-      if (data.log) {
+      setDayBlocked(Boolean(data.blocked));
+      if (data.log && !data.blocked) {
         setFlags({
           weightTraining: Boolean(data.log.weightTraining),
           cardio: Boolean(data.log.cardio),
@@ -116,6 +120,7 @@ export default function ActivitiesPage() {
         setFlags(emptyFlags());
       }
     } catch {
+      setDayBlocked(false);
       setFlags(emptyFlags());
     }
   }
@@ -187,6 +192,28 @@ export default function ActivitiesPage() {
     void withWriteAccess(doSave);
   }
 
+  async function handleUnblockDay() {
+    if (!personId || !date) return;
+    setUnblocking(true);
+    await withWriteAccess(async () => {
+      try {
+        await apiFetch(
+          `/api/blockouts?personId=${encodeURIComponent(personId)}&date=${encodeURIComponent(date)}`,
+          { method: "DELETE" },
+        );
+        setDayBlocked(false);
+        setToast("Day unblocked.");
+        await load(year, month);
+        await loadDayFlags(personId, date);
+      } catch (e) {
+        setToast(e instanceof Error ? e.message : "Unblock failed");
+      } finally {
+        setUnblocking(false);
+      }
+    });
+    setUnblocking(false);
+  }
+
   async function handleUndo() {
     const prev = undoRef.current;
     if (!prev) return;
@@ -234,12 +261,31 @@ export default function ActivitiesPage() {
     if (!today || !personId || !rows.length) return null;
     const row = rows.find((r) => r.person.id === personId);
     const day = row?.days.find((d) => d.date === today);
-    if (day && !day.hasActivity && date === today) {
+    if (day && !day.hasActivity && !day.blocked && date === today) {
       const name = people.find((p) => p.id === personId)?.name ?? "You";
       return `${name} — today is still empty…`;
     }
     return null;
   }, [today, personId, rows, date, people]);
+
+  // today+1 so timezone skew doesn't block evening logging
+  const maxLogDate = useMemo(() => {
+    if (!today) return "";
+    const d = new Date(`${today}T12:00:00`);
+    d.setDate(d.getDate() + 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, [today]);
+
+  // Keep dayBlocked in sync when month grid reloads for selected day
+  useEffect(() => {
+    if (!personId || !date || !rows.length) return;
+    const row = rows.find((r) => r.person.id === personId);
+    const day = row?.days.find((d) => d.date === date);
+    if (day) setDayBlocked(day.blocked);
+  }, [rows, personId, date]);
 
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-5 px-4 py-5 pb-24 sm:pb-8">
@@ -264,11 +310,14 @@ export default function ActivitiesPage() {
         date={date}
         flags={flags}
         saving={saving}
+        blocked={dayBlocked}
+        unblocking={unblocking}
         onPersonChange={handlePersonChange}
         onDateChange={handleDateChange}
         onFlagsChange={setFlags}
         onSave={handleSave}
-        maxDate={today || undefined}
+        onUnblockDay={() => void handleUnblockDay()}
+        maxDate={maxLogDate || undefined}
         minDate={people.find((p) => p.id === personId)?.joinDate}
         todayEmptyNudge={nudge}
       />
@@ -284,8 +333,21 @@ export default function ActivitiesPage() {
           onNext={() => shiftMonth(1)}
           onSelectDay={handleSelectDay}
           selected={personId && date ? { personId, date } : null}
+          maxDate={maxLogDate || undefined}
         />
       )}
+
+      <BlockOutPanel
+        people={people}
+        personId={personId}
+        onPersonChange={handlePersonChange}
+        onChanged={() => {
+          void load(year, month);
+          if (personId && date) void loadDayFlags(personId, date);
+        }}
+        withWriteAccess={withWriteAccess}
+        onToast={setToast}
+      />
 
       {toast === "saved" && canUndo ? (
         <div className="fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-[var(--border-strong)] bg-[var(--ink)] px-4 py-2 text-sm text-[var(--surface-raised)] shadow-lg sm:bottom-6">

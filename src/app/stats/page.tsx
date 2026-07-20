@@ -73,7 +73,7 @@ export default function StatsPage() {
         <div>
           <h1 className="brand text-2xl font-bold sm:text-3xl">Stats</h1>
           <p className="mt-1 text-sm text-[var(--ink-muted)]">
-            Hard work always pays off. Check your consistency.
+            Hard work always pays off. Check your stats.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

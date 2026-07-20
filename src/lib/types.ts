@@ -13,6 +13,8 @@ export type Person = {
   createdAt: string;
   /** false = soft-removed; data kept, hidden from board until re-added by code */
   active: boolean;
+  /** Set while soft-removed; used to auto-blockout the gap on restore */
+  deactivatedAt: string | null; // YYYY-MM-DD
 };
 
 export type ActivityLog = {
@@ -20,6 +22,14 @@ export type ActivityLog = {
   personId: string;
   date: string; // YYYY-MM-DD
 } & ActivityFlags;
+
+export type Blockout = {
+  id: string;
+  personId: string;
+  startDate: string; // YYYY-MM-DD inclusive
+  endDate: string; // YYYY-MM-DD inclusive
+  createdAt: string;
+};
 
 export type PersonalRecord = {
   id: string;
@@ -43,6 +53,7 @@ export type ExerciseDef = {
 export type DayCell = ActivityFlags & {
   date: string;
   hasActivity: boolean;
+  blocked: boolean;
 };
 
 export type PersonMonthRow = {

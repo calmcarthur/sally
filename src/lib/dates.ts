@@ -45,12 +45,12 @@ export function yearBounds(year: number): { start: string; end: string } {
   };
 }
 
-/** Eligible days for % worked: max(yearStart, joinDate) .. min(today, yearEnd) */
-export function eligibleDayCount(
+/** Eligible range for % worked: max(yearStart, joinDate) .. min(today, yearEnd) */
+export function eligibleRange(
   joinDate: string,
   year: number | null,
   asOf: string = todayISO(),
-): number {
+): { start: string; end: string } | null {
   const asOfDate = parseDate(asOf);
   let rangeStart: Date;
   let rangeEnd: Date;
@@ -64,8 +64,28 @@ export function eligibleDayCount(
     rangeEnd = minDate([parseDate(end), asOfDate]);
   }
 
-  if (isAfter(rangeStart, rangeEnd)) return 0;
-  return differenceInCalendarDays(rangeEnd, rangeStart) + 1;
+  if (isAfter(rangeStart, rangeEnd)) return null;
+  return { start: toISO(rangeStart), end: toISO(rangeEnd) };
+}
+
+/** Eligible days for % worked: max(yearStart, joinDate) .. min(today, yearEnd) */
+export function eligibleDayCount(
+  joinDate: string,
+  year: number | null,
+  asOf: string = todayISO(),
+  blockedDates?: Set<string>,
+): number {
+  const range = eligibleRange(joinDate, year, asOf);
+  if (!range) return 0;
+  const total =
+    differenceInCalendarDays(parseDate(range.end), parseDate(range.start)) + 1;
+  if (!blockedDates || blockedDates.size === 0) return total;
+
+  let blocked = 0;
+  for (const d of blockedDates) {
+    if (d >= range.start && d <= range.end) blocked += 1;
+  }
+  return Math.max(0, total - blocked);
 }
 
 export function daysInRange(start: string, end: string): string[] {

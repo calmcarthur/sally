@@ -75,7 +75,7 @@ export function PeopleAdmin({ open, onClose, onChanged }: Props) {
         setPeople(d.people);
         setInfo(
           d.restored
-            ? `Restored ${name} (${code.toUpperCase()}) — history intact.`
+            ? `Restored ${name} (${code.toUpperCase()}) — history intact; inactive gap blocked out.`
             : `Added ${name}.`,
         );
         setName("");
@@ -115,7 +115,7 @@ export function PeopleAdmin({ open, onClose, onChanged }: Props) {
         });
         setPeople(d.people);
         setInfo(
-          `${pendingRemove.name} hidden. Re-add with code ${pendingRemove.code} to restore.`,
+          `${pendingRemove.name} hidden. Re-add with code ${pendingRemove.code} to restore (gap will be blocked out).`,
         );
         cancelRemove();
         onChanged?.();
@@ -143,10 +143,32 @@ export function PeopleAdmin({ open, onClose, onChanged }: Props) {
           },
         );
         setPeople(d.people);
-        setInfo(`Restored ${person.name} — all history back on the board.`);
+        setInfo(
+          `Restored ${person.name} — history back; inactive gap blocked out.`,
+        );
         onChanged?.();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to restore");
+      }
+    });
+  }
+
+  async function saveJoinDate(person: Person, nextJoin: string) {
+    if (!nextJoin || nextJoin === person.joinDate) return;
+    setError(null);
+    setInfo(null);
+    await withAdminAccess(async () => {
+      try {
+        const d = await apiFetch<{ people: Person[] }>("/api/people", {
+          method: "PATCH",
+          pinKind: "admin",
+          body: JSON.stringify({ id: person.id, joinDate: nextJoin }),
+        });
+        setPeople(d.people);
+        setInfo(`Updated join date for ${person.name}.`);
+        onChanged?.();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update join date");
       }
     });
   }
@@ -160,7 +182,8 @@ export function PeopleAdmin({ open, onClose, onChanged }: Props) {
               <h2 className="brand text-xl font-bold">People</h2>
               <p className="mt-1 text-xs text-[var(--ink-muted)]">
                 Administrator only. Code is permanent — remove hides them; data
-                stays until you restore with the same code.
+                stays until you restore with the same code. The inactive gap is
+                blocked out automatically so stats stay fair.
               </p>
             </div>
             <button
@@ -174,23 +197,34 @@ export function PeopleAdmin({ open, onClose, onChanged }: Props) {
 
           <ul className="mt-4 divide-y divide-[var(--border)]">
             {active.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center justify-between gap-3 py-2.5"
-              >
-                <div>
-                  <div className="text-sm font-semibold">{p.name}</div>
-                  <div className="text-xs text-[var(--ink-muted)]">
-                    {p.code} · joined {p.joinDate}
+              <li key={p.id} className="flex flex-col gap-2 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">{p.name}</div>
+                    <div className="text-xs text-[var(--ink-muted)]">
+                      {p.code}
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => startRemove(p)}
+                    className="rounded-md border border-[var(--danger)]/40 px-2 py-1 text-xs text-[var(--danger)]"
+                  >
+                    Remove
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => startRemove(p)}
-                  className="rounded-md border border-[var(--danger)]/40 px-2 py-1 text-xs text-[var(--danger)]"
-                >
-                  Remove
-                </button>
+                <label className="flex items-center gap-2 text-xs text-[var(--ink-muted)]">
+                  Join date
+                  <input
+                    type="date"
+                    defaultValue={p.joinDate}
+                    key={`${p.id}-${p.joinDate}`}
+                    onBlur={(e) => {
+                      void saveJoinDate(p, e.target.value);
+                    }}
+                    className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--ink)]"
+                  />
+                </label>
               </li>
             ))}
           </ul>
@@ -239,6 +273,7 @@ export function PeopleAdmin({ open, onClose, onChanged }: Props) {
                   off Activities / Stats / PRs. Their logs and PRs stay in the
                   DB — re-add with code{" "}
                   <strong>{pendingRemove.code}</strong> to bring them back.
+                  Days while hidden will be blocked out automatically.
                 </p>
               )}
               <div className="mt-3 flex gap-2">
@@ -267,7 +302,7 @@ export function PeopleAdmin({ open, onClose, onChanged }: Props) {
             <h3 className="text-sm font-semibold">Add / restore</h3>
             <p className="text-xs text-[var(--ink-muted)]">
               New code = new person. Existing hidden code = restore with full
-              history (join date ignored on restore).
+              history (join date ignored on restore; inactive gap blocked out).
             </p>
             <input
               required

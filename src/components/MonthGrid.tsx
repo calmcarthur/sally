@@ -13,6 +13,8 @@ type Props = {
   onNext: () => void;
   onSelectDay: (personId: string, date: string) => void;
   selected?: { personId: string; date: string } | null;
+  /** Latest selectable date (usually today+1). Days after this are disabled. */
+  maxDate?: string;
 };
 
 const FLAG_KEYS: ActivityKey[] = [
@@ -30,6 +32,7 @@ export function MonthGrid({
   onNext,
   onSelectDay,
   selected,
+  maxDate,
 }: Props) {
   const label = format(new Date(year, month - 1, 1), "MMMM yyyy");
   const dayCount = rows[0]?.days.length ?? 0;
@@ -74,6 +77,14 @@ export function MonthGrid({
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[var(--border)]" />
           Nothing
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="relative inline-block h-2.5 w-2.5 rounded-sm bg-[color-mix(in_srgb,var(--border)_55%,transparent)]">
+            <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none text-[var(--ink-muted)]">
+              ×
+            </span>
+          </span>
+          Blocked
         </span>
       </div>
 
@@ -124,26 +135,44 @@ export function MonthGrid({
                     const isSelected =
                       selected?.personId === row.person.id &&
                       selected?.date === day.date;
+                    const tooFar =
+                      Boolean(maxDate) && day.date > (maxDate as string);
                     const segments = FLAG_KEYS.filter((k) => day[k]);
                     return (
                       <button
                         key={day.date}
                         type="button"
-                        title={`${row.person.name} · ${day.date}`}
+                        title={
+                          tooFar
+                            ? `${row.person.name} · ${day.date} · too far ahead`
+                            : `${row.person.name} · ${day.date}${day.blocked ? " · blocked" : ""}`
+                        }
+                        disabled={tooFar}
                         onClick={() =>
                           onSelectDay(row.person.id, day.date)
                         }
-                        className={`flex h-9 flex-col overflow-hidden rounded-sm border transition ${
-                          isSelected
-                            ? "border-[var(--border-strong)] ring-2 ring-[var(--accent)]"
-                            : "border-transparent hover:border-[var(--border)]"
+                        className={`relative flex h-9 flex-col overflow-hidden rounded-sm border transition ${
+                          tooFar
+                            ? "cursor-not-allowed opacity-35"
+                            : isSelected
+                              ? "border-[var(--border-strong)] ring-2 ring-[var(--accent)]"
+                              : "border-transparent hover:border-[var(--border)]"
                         } ${
-                          day.hasActivity
-                            ? "bg-[var(--surface)]"
-                            : "bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
+                          day.blocked
+                            ? "bg-[color-mix(in_srgb,var(--border)_55%,transparent)]"
+                            : day.hasActivity
+                              ? "bg-[var(--surface)]"
+                              : "bg-[color-mix(in_srgb,var(--border)_45%,transparent)]"
                         }`}
                       >
-                        {segments.length === 0 ? (
+                        {day.blocked ? (
+                          <span
+                            className="flex flex-1 items-center justify-center text-sm font-semibold leading-none text-[var(--ink-muted)]"
+                            aria-label="Blocked"
+                          >
+                            ×
+                          </span>
+                        ) : segments.length === 0 ? (
                           <span className="flex-1" />
                         ) : (
                           segments.map((key) => {

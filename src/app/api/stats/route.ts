@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllLogs, listAllPrs, listPeople } from "@/lib/db";
+import { getAllLogs, listAllBlockouts, listAllPrs, listPeople } from "@/lib/db";
 import { buildLeaderboards, computeAllStats } from "@/lib/stats";
 import { APP_START_YEAR } from "@/lib/constants";
 import { currentYearInTimeZone } from "@/lib/validate";
@@ -27,13 +27,14 @@ export async function GET(request: Request) {
     year = n;
   }
 
-  const [people, logs, prs] = await Promise.all([
+  const [people, logs, prs, blockouts] = await Promise.all([
     listPeople(),
     getAllLogs(),
     listAllPrs(),
+    listAllBlockouts(),
   ]);
 
-  const stats = computeAllStats(people, logs, prs, year);
+  const stats = computeAllStats(people, logs, prs, year, blockouts);
   const leaderboards = buildLeaderboards(stats);
 
   return NextResponse.json({

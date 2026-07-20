@@ -4,6 +4,7 @@ import {
   deactivatePerson,
   listAllPeople,
   listPeople,
+  updatePersonJoinDate,
 } from "@/lib/db";
 import { requireAdminPin } from "@/lib/pin-server";
 import { todayISO } from "@/lib/dates";
@@ -55,9 +56,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { person, restored } = await createPerson(name, code, joinDate);
+    const { person, restored, autoBlockout } = await createPerson(
+      name,
+      code,
+      joinDate,
+    );
     const people = await listAllPeople();
-    return NextResponse.json({ person, people, restored });
+    return NextResponse.json({ person, people, restored, autoBlockout });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to add person";
     if (message.includes("UNIQUE")) {
@@ -68,6 +73,40 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+export async function PATCH(request: Request) {
+  const denied = requireAdminPin(request);
+  if (denied) return denied;
+
+  const parsed = await readJsonBody<{
+    id?: string;
+    joinDate?: string;
+  }>(request);
+  if (!parsed.ok) return parsed.response;
+
+  const id = String(parsed.body.id ?? "").trim();
+  const joinDate = String(parsed.body.joinDate ?? "").trim();
+
+  if (!id || !joinDate) {
+    return NextResponse.json(
+      { error: "id and joinDate are required." },
+      { status: 400 },
+    );
+  }
+  if (!isValidISODate(joinDate)) {
+    return NextResponse.json(
+      { error: "joinDate must be YYYY-MM-DD." },
+      { status: 400 },
+    );
+  }
+
+  const person = await updatePersonJoinDate(id, joinDate);
+  if (!person) {
+    return NextResponse.json({ error: "Person not found." }, { status: 404 });
+  }
+  const people = await listAllPeople();
+  return NextResponse.json({ person, people });
 }
 
 export async function DELETE(request: Request) {

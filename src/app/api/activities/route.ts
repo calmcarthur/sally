@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import {
   getActiveDatesDesc,
+  getBlockoutsForMonth,
   getLogForDay,
   getLogsForMonth,
   getPersonById,
+  isPersonDateBlocked,
+  listBlockoutsForPerson,
   listPeople,
   upsertActivityLog,
 } from "@/lib/db";
+import { blockoutDateSet } from "@/lib/blockouts";
 import { buildMonthRows } from "@/lib/month";
 import { requireWritePin } from "@/lib/pin-server";
 import { addDaysISO, todayISO } from "@/lib/dates";
@@ -41,7 +45,10 @@ export async function GET(request: Request) {
   }
 
   const people = await listPeople();
-  const monthLogs = await getLogsForMonth(year, month);
+  const [monthLogs, monthBlockouts] = await Promise.all([
+    getLogsForMonth(year, month),
+    getBlockoutsForMonth(year, month),
+  ]);
   const today = todayISO();
   // Enough history for any realistic current streak without loading the full table
   const since = addDaysISO(today, -400);
@@ -49,12 +56,27 @@ export async function GET(request: Request) {
   const streakByPerson = new Map<string, number>();
   await Promise.all(
     people.map(async (p) => {
-      const dates = await getActiveDatesDesc(p.id, since);
-      streakByPerson.set(p.id, currentStreakFromDates(dates, today));
+      const [dates, personBlockouts] = await Promise.all([
+        getActiveDatesDesc(p.id, since),
+        listBlockoutsForPerson(p.id),
+      ]);
+      const blocked = blockoutDateSet(personBlockouts);
+      const active = dates.filter((d) => !blocked.has(d));
+      streakByPerson.set(
+        p.id,
+        currentStreakFromDates(active, today, blocked),
+      );
     }),
   );
 
-  const rows = buildMonthRows(people, monthLogs, year, month, streakByPerson);
+  const rows = buildMonthRows(
+    people,
+    monthLogs,
+    year,
+    month,
+    streakByPerson,
+    monthBlockouts,
+  );
 
   return NextResponse.json({
     year,
@@ -62,6 +84,7 @@ export async function GET(request: Request) {
     people,
     rows,
     today,
+    blockouts: monthBlockouts,
   });
 }
 
@@ -103,15 +126,24 @@ export async function POST(request: Request) {
   }
 
   const today = todayISO();
-  if (date > today) {
+  // Allow today+1 so timezone skew doesn't block evening logging
+  const maxLogDate = addDaysISO(today, 1);
+  if (date > maxLogDate) {
     return NextResponse.json(
-      { error: "Cannot log a future date." },
+      { error: "Cannot log more than one day ahead." },
       { status: 400 },
     );
   }
   if (date < person.joinDate) {
     return NextResponse.json(
       { error: `Cannot log before join date (${person.joinDate}).` },
+      { status: 400 },
+    );
+  }
+
+  if (await isPersonDateBlocked(personId, date)) {
+    return NextResponse.json(
+      { error: "That day is blocked. Unblock it before logging." },
       { status: 400 },
     );
   }
@@ -142,6 +174,9 @@ export async function PUT(request: Request) {
       { status: 400 },
     );
   }
-  const log = await getLogForDay(personId, date);
-  return NextResponse.json({ log });
+  const [log, blocked] = await Promise.all([
+    getLogForDay(personId, date),
+    isPersonDateBlocked(personId, date),
+  ]);
+  return NextResponse.json({ log, blocked });
 }

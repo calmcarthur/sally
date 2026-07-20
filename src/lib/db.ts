@@ -3,7 +3,9 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
 import { SEED_PEOPLE } from "./constants";
-import type { ActivityLog, Person, PersonalRecord } from "./types";
+import { addDaysISO, todayISO } from "./dates";
+import { splitRangeAroundDay } from "./blockouts";
+import type { ActivityLog, Blockout, Person, PersonalRecord } from "./types";
 
 let client: Client | null = null;
 let initialized = false;
@@ -46,13 +48,16 @@ export function getDb(): Client {
   return client;
 }
 
-async function migratePeopleActive(db: Client) {
+async function migratePeopleColumns(db: Client) {
   const info = await db.execute(`PRAGMA table_info(people)`);
-  const hasActive = info.rows.some((r) => String(r.name) === "active");
-  if (!hasActive) {
+  const cols = new Set(info.rows.map((r) => String(r.name)));
+  if (!cols.has("active")) {
     await db.execute(
       `ALTER TABLE people ADD COLUMN active INTEGER NOT NULL DEFAULT 1`,
     );
+  }
+  if (!cols.has("deactivated_at")) {
+    await db.execute(`ALTER TABLE people ADD COLUMN deactivated_at TEXT`);
   }
 }
 
@@ -95,6 +100,13 @@ export async function ensureSchema() {
         recorded_on TEXT NOT NULL,
         UNIQUE(person_id, exercise_key)
       )`,
+      `CREATE TABLE IF NOT EXISTS blockouts (
+        id TEXT PRIMARY KEY,
+        person_id TEXT NOT NULL REFERENCES people(id),
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
       `CREATE TABLE IF NOT EXISTS schema_meta (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -102,11 +114,12 @@ export async function ensureSchema() {
       `CREATE INDEX IF NOT EXISTS idx_logs_person_date ON activity_logs(person_id, date)`,
       `CREATE INDEX IF NOT EXISTS idx_logs_date ON activity_logs(date)`,
       `CREATE INDEX IF NOT EXISTS idx_prs_exercise ON personal_records(exercise_key)`,
+      `CREATE INDEX IF NOT EXISTS idx_blockouts_person ON blockouts(person_id, start_date, end_date)`,
     ],
     "write",
   );
 
-  await migratePeopleActive(db);
+  await migratePeopleColumns(db);
 
   await db.execute(
     `INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('version', '2')`,
@@ -146,6 +159,20 @@ function mapPerson(row: Record<string, unknown>): Person {
     active: row.active === undefined || row.active === null
       ? true
       : Boolean(Number(row.active)),
+    deactivatedAt:
+      row.deactivated_at == null || row.deactivated_at === ""
+        ? null
+        : String(row.deactivated_at),
+  };
+}
+
+function mapBlockout(row: Record<string, unknown>): Blockout {
+  return {
+    id: String(row.id),
+    personId: String(row.person_id),
+    startDate: String(row.start_date),
+    endDate: String(row.end_date),
+    createdAt: String(row.created_at),
   };
 }
 
@@ -237,12 +264,13 @@ export async function getActiveDatesDesc(
 /**
  * Add a new person, or restore a soft-removed one by matching code.
  * Code is the stable unique key — history stays attached to the same row.
+ * On restore, auto-blockouts the inactive gap (deactivated_at → yesterday).
  */
 export async function createPerson(
   name: string,
   code: string,
   joinDate: string,
-): Promise<{ person: Person; restored: boolean }> {
+): Promise<{ person: Person; restored: boolean; autoBlockout: Blockout | null }> {
   await ensureSchema();
   const normalized = code.trim().toUpperCase();
   const existing = await getPersonByCode(normalized);
@@ -251,14 +279,33 @@ export async function createPerson(
     if (existing.active) {
       throw new Error("UNIQUE: That identity code is already on the board.");
     }
-    // Restore — keep join_date and all history; refresh display name
+
+    let autoBlockout: Blockout | null = null;
+    const today = todayISO();
+    if (existing.deactivatedAt) {
+      const endDate = addDaysISO(today, -1);
+      if (existing.deactivatedAt <= endDate) {
+        autoBlockout = await createBlockout(
+          existing.id,
+          existing.deactivatedAt,
+          endDate,
+        );
+      }
+    }
+
     await getDb().execute({
-      sql: `UPDATE people SET active = 1, name = ? WHERE id = ?`,
+      sql: `UPDATE people SET active = 1, name = ?, deactivated_at = NULL WHERE id = ?`,
       args: [name.trim(), existing.id],
     });
     return {
-      person: { ...existing, name: name.trim(), active: true },
+      person: {
+        ...existing,
+        name: name.trim(),
+        active: true,
+        deactivatedAt: null,
+      },
       restored: true,
+      autoBlockout,
     };
   }
 
@@ -269,12 +316,13 @@ export async function createPerson(
     joinDate,
     createdAt: new Date().toISOString(),
     active: true,
+    deactivatedAt: null,
   };
   await getDb().execute({
-    sql: `INSERT INTO people (id, name, code, join_date, created_at, active) VALUES (?, ?, ?, ?, ?, 1)`,
+    sql: `INSERT INTO people (id, name, code, join_date, created_at, active, deactivated_at) VALUES (?, ?, ?, ?, ?, 1, NULL)`,
     args: [person.id, person.name, person.code, person.joinDate, person.createdAt],
   });
-  return { person, restored: false };
+  return { person, restored: false, autoBlockout: null };
 }
 
 /** Soft-remove: hide from board, keep all activity + PR rows. Returns false if missing. */
@@ -283,10 +331,150 @@ export async function deactivatePerson(id: string): Promise<boolean> {
   const person = await getPersonById(id);
   if (!person) return false;
   await getDb().execute({
-    sql: `UPDATE people SET active = 0 WHERE id = ?`,
-    args: [id],
+    sql: `UPDATE people SET active = 0, deactivated_at = ? WHERE id = ?`,
+    args: [todayISO(), id],
   });
   return true;
+}
+
+export async function updatePersonJoinDate(
+  id: string,
+  joinDate: string,
+): Promise<Person | null> {
+  await ensureSchema();
+  const person = await getPersonById(id);
+  if (!person) return null;
+  await getDb().execute({
+    sql: `UPDATE people SET join_date = ? WHERE id = ?`,
+    args: [joinDate, id],
+  });
+  return { ...person, joinDate };
+}
+
+export async function createBlockout(
+  personId: string,
+  startDate: string,
+  endDate: string,
+): Promise<Blockout> {
+  await ensureSchema();
+  const blockout: Blockout = {
+    id: nanoid(),
+    personId,
+    startDate,
+    endDate,
+    createdAt: new Date().toISOString(),
+  };
+  await getDb().execute({
+    sql: `INSERT INTO blockouts (id, person_id, start_date, end_date, created_at) VALUES (?, ?, ?, ?, ?)`,
+    args: [
+      blockout.id,
+      blockout.personId,
+      blockout.startDate,
+      blockout.endDate,
+      blockout.createdAt,
+    ],
+  });
+  return blockout;
+}
+
+export async function deleteBlockout(id: string): Promise<boolean> {
+  await ensureSchema();
+  const res = await getDb().execute({
+    sql: `DELETE FROM blockouts WHERE id = ?`,
+    args: [id],
+  });
+  return (res.rowsAffected ?? 0) > 0;
+}
+
+export async function getBlockoutById(id: string): Promise<Blockout | null> {
+  await ensureSchema();
+  const res = await getDb().execute({
+    sql: `SELECT * FROM blockouts WHERE id = ?`,
+    args: [id],
+  });
+  if (!res.rows[0]) return null;
+  return mapBlockout(res.rows[0] as Record<string, unknown>);
+}
+
+export async function listBlockoutsForPerson(
+  personId: string,
+): Promise<Blockout[]> {
+  await ensureSchema();
+  const res = await getDb().execute({
+    sql: `SELECT * FROM blockouts WHERE person_id = ? ORDER BY start_date ASC`,
+    args: [personId],
+  });
+  return res.rows.map((r) => mapBlockout(r as Record<string, unknown>));
+}
+
+export async function listAllBlockouts(): Promise<Blockout[]> {
+  await ensureSchema();
+  const res = await getDb().execute(
+    `SELECT * FROM blockouts ORDER BY start_date ASC`,
+  );
+  return res.rows.map((r) => mapBlockout(r as Record<string, unknown>));
+}
+
+/** Blockouts that overlap a calendar month (any day in that month). */
+export async function getBlockoutsForMonth(
+  year: number,
+  month: number,
+): Promise<Blockout[]> {
+  await ensureSchema();
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const endMonth = month === 12 ? 1 : month + 1;
+  const endYear = month === 12 ? year + 1 : year;
+  const endExclusive = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
+  const res = await getDb().execute({
+    sql: `SELECT * FROM blockouts
+      WHERE start_date < ? AND end_date >= ?
+      ORDER BY start_date ASC`,
+    args: [endExclusive, start],
+  });
+  return res.rows.map((r) => mapBlockout(r as Record<string, unknown>));
+}
+
+export async function isPersonDateBlocked(
+  personId: string,
+  date: string,
+): Promise<boolean> {
+  await ensureSchema();
+  const res = await getDb().execute({
+    sql: `SELECT 1 FROM blockouts
+      WHERE person_id = ? AND start_date <= ? AND end_date >= ?
+      LIMIT 1`,
+    args: [personId, date, date],
+  });
+  return res.rows.length > 0;
+}
+
+/**
+ * Remove a single day from any covering blockout ranges (split remainders).
+ * Returns the number of ranges that were modified.
+ */
+export async function unblockDay(
+  personId: string,
+  date: string,
+): Promise<number> {
+  await ensureSchema();
+  const res = await getDb().execute({
+    sql: `SELECT * FROM blockouts
+      WHERE person_id = ? AND start_date <= ? AND end_date >= ?`,
+    args: [personId, date, date],
+  });
+  const covering = res.rows.map((r) =>
+    mapBlockout(r as Record<string, unknown>),
+  );
+  for (const b of covering) {
+    await getDb().execute({
+      sql: `DELETE FROM blockouts WHERE id = ?`,
+      args: [b.id],
+    });
+    for (const rem of splitRangeAroundDay(b.startDate, b.endDate, date)) {
+      await createBlockout(personId, rem.startDate, rem.endDate);
+    }
+  }
+  return covering.length;
 }
 
 export async function getLogsForMonth(

@@ -5,10 +5,12 @@ import {
   todayISO,
   yearBounds,
 } from "./dates";
+import { blockoutDateSet } from "./blockouts";
 import { computeRecordHolders, countRecordsHeld, type RecordHolder } from "./prs";
 import { bestStreak, currentStreak } from "./streaks";
 import type {
   ActivityLog,
+  Blockout,
   Person,
   PersonStats,
   PersonalRecord,
@@ -30,13 +32,15 @@ function filterLogs(
   year: number | null,
   joinDate: string,
   asOf: string,
+  blocked: Set<string>,
 ): ActivityLog[] {
   let filtered = logs.filter(
     (l) =>
       l.personId === personId &&
       hasAny(l) &&
       l.date >= joinDate &&
-      l.date <= asOf,
+      l.date <= asOf &&
+      !blocked.has(l.date),
   );
   if (year !== null) {
     const { start, end } = yearBounds(year);
@@ -58,14 +62,24 @@ export function computePersonStats(
   year: number | null,
   asOf: string = todayISO(),
   holders?: RecordHolder[],
+  personBlockouts: Blockout[] = [],
 ): PersonStats {
-  const logs = filterLogs(allLogs, person.id, year, person.joinDate, asOf);
+  const blocked = blockoutDateSet(personBlockouts);
+  const logs = filterLogs(
+    allLogs,
+    person.id,
+    year,
+    person.joinDate,
+    asOf,
+    blocked,
+  );
   // For current streak always use full history (still clamp to join..today)
   const personAllLogs = allLogs.filter(
     (l) =>
       l.personId === person.id &&
       l.date >= person.joinDate &&
-      l.date <= asOf,
+      l.date <= asOf &&
+      !blocked.has(l.date),
   );
 
   let weightTraining = 0;
@@ -83,7 +97,7 @@ export function computePersonStats(
   const totalExercises = weightTraining + cardio + sport + activeRecovery;
   const intense = weightTraining + cardio + sport;
   const daysActive = new Set(logs.map((l) => l.date)).size;
-  const eligibleDays = eligibleDayCount(person.joinDate, year, asOf);
+  const eligibleDays = eligibleDayCount(person.joinDate, year, asOf, blocked);
   const percentDaysWorked =
     eligibleDays === 0
       ? 0
@@ -143,8 +157,8 @@ export function computePersonStats(
     daysActive,
     eligibleDays,
     percentDaysWorked,
-    currentStreak: currentStreak(personAllLogs, asOf),
-    bestStreak: bestStreak(personAllLogs, rangeStart, rangeEnd),
+    currentStreak: currentStreak(personAllLogs, asOf, blocked),
+    bestStreak: bestStreak(personAllLogs, rangeStart, rangeEnd, blocked),
     sallyRecordsHeld,
     categoryMix,
     monthlyTotals,
@@ -157,11 +171,26 @@ export function computeAllStats(
   allLogs: ActivityLog[],
   allPrs: PersonalRecord[],
   year: number | null,
+  allBlockouts: Blockout[] = [],
 ): PersonStats[] {
   const activeIds = people.map((p) => p.id);
   const holders = computeRecordHolders(allPrs, activeIds);
+  const byPerson = new Map<string, Blockout[]>();
+  for (const b of allBlockouts) {
+    const list = byPerson.get(b.personId) ?? [];
+    list.push(b);
+    byPerson.set(b.personId, list);
+  }
   return people.map((p) =>
-    computePersonStats(p, allLogs, allPrs, year, todayISO(), holders),
+    computePersonStats(
+      p,
+      allLogs,
+      allPrs,
+      year,
+      todayISO(),
+      holders,
+      byPerson.get(p.id) ?? [],
+    ),
   );
 }
 
