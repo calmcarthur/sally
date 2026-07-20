@@ -16,7 +16,7 @@ const body = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "Sally — Group Fitness Tracker",
+  title: "Had to tell Sally",
   description:
     "Had to tell Sally I was going to the navy. Activities, stats, and PRs.",
   icons: {

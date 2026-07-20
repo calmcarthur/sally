@@ -120,7 +120,7 @@ export default function PrsPage() {
 
       <section className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 shadow-sm">
         <h2 className="brand text-xl font-bold">Enter / update</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <label className="text-sm">
             <span className="text-[var(--ink-muted)]">Who</span>
             <select
@@ -156,16 +156,12 @@ export default function PrsPage() {
             </select>
           </label>
           <label className="text-sm">
-            <span className="text-[var(--ink-muted)]">
-              Value{" "}
-              <span className="opacity-70">
-                (time as m:ss or h:mm:ss)
-              </span>
-            </span>
+            <span className="text-[var(--ink-muted)]">Value</span>
             <input
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="e.g. 225 or 22:15"
+              placeholder="225 or 22:15"
+              title="Number, or time as m:ss / h:mm:ss"
               className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
             />
           </label>
@@ -180,6 +176,9 @@ export default function PrsPage() {
             />
           </label>
         </div>
+        <p className="mt-2 text-xs text-[var(--ink-muted)]">
+          Times: m:ss or h:mm:ss
+        </p>
         <button
           type="button"
           disabled={saving || !value || !personId}
