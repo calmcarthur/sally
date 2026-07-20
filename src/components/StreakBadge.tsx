@@ -2,21 +2,8 @@
 
 import { STREAK_THRESHOLD } from "@/lib/constants";
 
-export function StreakBadge({
-  streak,
-  compact = false,
-}: {
-  streak: number;
-  compact?: boolean;
-}) {
-  if (streak < STREAK_THRESHOLD) {
-    if (compact || streak === 0) return null;
-    return (
-      <span className="text-xs text-[var(--ink-muted)]" title="Current streak">
-        {streak}d
-      </span>
-    );
-  }
+export function StreakBadge({ streak }: { streak: number }) {
+  if (streak < STREAK_THRESHOLD) return null;
 
   return (
     <span
