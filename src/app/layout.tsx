@@ -19,6 +19,10 @@ export const metadata: Metadata = {
   title: "Sally — Group Fitness Tracker",
   description:
     "Had to tell Sally I was going to the navy. Activities, stats, and PRs.",
+  icons: {
+    icon: "/Badge_of_the_Royal_Canadian_Navy.svg.png",
+    apple: "/Badge_of_the_Royal_Canadian_Navy.svg.png",
+  },
 };
 
 export const viewport = {
