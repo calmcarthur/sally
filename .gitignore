@@ -33,7 +33,6 @@ yarn-error.log*
 
 # env files (keep .env.example trackable)
 .env*
-!.env.example
 
 # vercel
 .vercel
